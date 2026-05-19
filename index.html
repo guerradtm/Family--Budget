@@ -1,51 +1,379 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'data.json');
-
-const defaultData = {
-bills: [
-{ id: 'b1', name: 'Electric bill', amount: 120, due: '25th', status: 'unpaid' },
-{ id: 'b2', name: 'Internet', amount: 65, due: '20th', status: 'unpaid' },
-{ id: 'b3', name: 'Phone bill', amount: 45, due: '15th', status: 'unpaid' },
-],
-requests: [],
-month: 'June 2026',
-};
-
-function readData() {
-try {
-return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-} catch {
-return defaultData;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Family Budget</title>
+ <style>
+ *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ body {
+ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+ background: #f5f4f0;
+ color: #1c1c1a;
+ min-height: 100vh;
+ }
+ .app { max-width: 480px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+ 
+ .pin-screen {
+ min-height: 100vh;
+ display: flex;
+ flex-direction: column;
+ align-items: center;
+ justify-content: center;
+ gap: 1.25rem;
+ padding: 2rem;
+ }
+ .pin-icon { font-size: 40px; }
+ .pin-title { font-size: 24px; font-weight: 600; }
+ .pin-sub { font-size: 14px; color: #888; text-align: center; }
+ .pin-input {
+ font-size: 30px;
+ letter-spacing: 14px;
+ text-align: center;
+ width: 170px;
+ padding: 12px 16px;
+ border: 1.5px solid #d0cec8;
+ border-radius: 14px;
+ background: white;
+ outline: none;
+ }
+ .pin-input:focus { border-color: #666; }
+ .pin-error { font-size: 13px; color: #c0392b; font-weight: 500; }
+ 
+ button {
+ cursor: pointer;
+ font-family: inherit;
+ font-size: 13px;
+ padding: 7px 13px;
+ border: 0.5px solid #d0cec8;
+ border-radius: 8px;
+ background: transparent;
+ color: #1c1c1a;
+ transition: background 0.12s;
+ }
+ button:hover { background: rgba(0,0,0,0.05); }
+ button:active { transform: scale(0.97); }
+ button.danger { color: #c0392b; border-color: #f5c6bd; }
+ button.danger:hover { background: #fef2ef; }
+ button.text-btn { border: none; color: #888; font-size: 12px; padding: 4px 0; text-decoration: underline; }
+ button.text-btn:hover { color: #444; background: none; }
+ 
+ input {
+ font-family: inherit;
+ font-size: 13px;
+ padding: 8px 10px;
+ border: 0.5px solid #d0cec8;
+ border-radius: 8px;
+ background: #faf9f7;
+ color: #1c1c1a;
+ outline: none;
+ }
+ input:focus { border-color: #888; background: white; }
+ 
+ .toggle { display: flex; background: #eae9e5; border-radius: 10px; padding: 3px; gap: 3px; }
+ .toggle button { border: none; padding: 7px 16px; border-radius: 8px; font-size: 13px; color: #666; }
+ .toggle button.active { background: white; font-weight: 600; color: #1c1c1a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+ .toggle button:hover { background: rgba(255,255,255,0.5); }
+ .toggle button.active:hover { background: white; }
+ 
+ .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1.5rem; }
+ .summary-card { background: white; border-radius: 12px; padding: 12px 10px; border: 0.5px solid #e8e7e3; }
+ .summary-label { font-size: 11px; color: #999; margin-bottom: 4px; }
+ .summary-value { font-size: 19px; font-weight: 600; }
+ 
+ .row {
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ background: white;
+ border: 0.5px solid #e8e7e3;
+ border-radius: 12px;
+ padding: 12px 14px;
+ margin-bottom: 7px;
+ }
+ .row-info { flex: 1; min-width: 0; }
+ .row-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+ .row-sub { font-size: 11px; color: #999; margin-top: 2px; }
+ .row-amount { font-size: 14px; font-weight: 600; min-width: 54px; text-align: right; flex-shrink: 0; }
+ .row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+ 
+ .badge { font-size: 11px; padding: 3px 9px; border-radius: 6px; font-weight: 500; white-space: nowrap; }
+ .badge-unpaid { background: #fef3cd; color: #856404; }
+ .badge-sent { background: #d1e7f5; color: #0d4f8a; }
+ .badge-confirmed { background: #d4edda; color: #155724; }
+ .badge-pending { background: #fef3cd; color: #856404; }
+ .badge-done { background: #d4edda; color: #155724; }
+ 
+ .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+ .section-title { font-size: 14px; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.5px; }
+ .form-row {
+ display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;
+ background: #eae9e5; padding: 12px; border-radius: 10px; margin-bottom: 10px;
+ }
+ .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; }
+ .header-title { font-size: 20px; font-weight: 700; }
+ .header-sub { font-size: 12px; color: #999; margin-top: 3px; }
+ .empty { font-size: 13px; color: #bbb; padding: 6px 0 10px; }
+ .divider { border: none; border-top: 0.5px solid #e8e7e3; margin: 1.25rem 0; }
+ .section-gap { margin-bottom: 1.5rem; }
+ 
+ .sync-bar {
+ background: #fff8e1;
+ border: 0.5px solid #ffe082;
+ border-radius: 10px;
+ padding: 10px 14px;
+ font-size: 12px;
+ color: #7a6000;
+ margin-bottom: 1rem;
+ display: flex;
+ align-items: center;
+ gap: 8px;
+ }
+ </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script>
+const { useState, useEffect, useCallback } = React;
+ 
+// ============================================================
+// CHANGE THESE TO YOUR OWN PIN CODES
+const MY_PIN = "1234"; // Your 4-digit PIN
+const MOM_PIN = "5678"; // Mom's 4-digit PIN
+// ============================================================
+ 
+const STORAGE_KEY = "family-budget-data";
+ 
+function genId() { return Math.random().toString(36).slice(2, 9); }
+function fmt(n) { const v = Number(n); return "$" + (isNaN(v) ? "0.00" : v.toFixed(2)); }
+ 
+function loadData() {
+ try {
+ const raw = localStorage.getItem(STORAGE_KEY);
+ return raw ? JSON.parse(raw) : defaultData();
+ } catch { return defaultData(); }
 }
+ 
+function saveData(data) {
+ localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
-
-function writeData(data) {
-fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+ 
+function defaultData() {
+ return {
+ bills: [
+ { id: "b1", name: "Electric bill", amount: 120, due: "25th", status: "unpaid" },
+ { id: "b2", name: "Internet", amount: 65, due: "20th", status: "unpaid" },
+ { id: "b3", name: "Phone bill", amount: 45, due: "15th", status: "unpaid" },
+ ],
+ requests: [],
+ month: "June 2026",
+ };
 }
-
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Get budget data
-app.get('/api/data', (req, res) => {
-res.json(readData());
-});
-
-// Save budget data
-app.post('/api/data', (req, res) => {
-try {
-writeData(req.body);
-res.json({ ok: true });
-} catch (err) {
-res.status(500).json({ error: 'Failed to save data' });
+ 
+function Badge({ status }) {
+ const map = {
+ unpaid: { cls: "badge-unpaid", label: "Not sent" },
+ sent: { cls: "badge-sent", label: "Sent ✓" },
+ confirmed: { cls: "badge-confirmed", label: "Got it ✓✓" },
+ pending: { cls: "badge-pending", label: "Pending" },
+ done: { cls: "badge-done", label: "Received ✓" },
+ };
+ const { cls, label } = map[status] || map.pending;
+ return React.createElement("span", { className: "badge " + cls }, label);
 }
-});
-
-app.listen(PORT, () => {
-console.log(`Family Budget app running on port ${PORT}`);
-});
+ 
+function PinScreen({ onLogin }) {
+ const [pin, setPin] = useState("");
+ const [error, setError] = useState("");
+ 
+ function check(p) {
+ if (p === MY_PIN) { onLogin("mine"); return; }
+ if (p === MOM_PIN) { onLogin("mom"); return; }
+ if (p.length === 4) setError("Wrong PIN — try again");
+ }
+ 
+ return React.createElement("div", { className: "pin-screen" },
+ React.createElement("div", { className: "pin-icon" }, "💰"),
+ React.createElement("div", { className: "pin-title" }, "Family Budget"),
+ React.createElement("p", { className: "pin-sub" }, "Enter your PIN to continue"),
+ React.createElement("input", {
+ className: "pin-input",
+ type: "tel",
+ maxLength: 4,
+ value: pin,
+ placeholder: "••••",
+ autoFocus: true,
+ onChange: e => {
+ const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+ setPin(v);
+ setError("");
+ check(v);
+ },
+ }),
+ error && React.createElement("div", { className: "pin-error" }, error)
+ );
+}
+ 
+function App() {
+ const [view, setView] = useState(null);
+ const [data, setData] = useState(null);
+ const [billForm, setBillForm] = useState({ show: false, name: "", amount: "", due: "" });
+ const [reqForm, setReqForm] = useState({ show: false, desc: "", amount: "" });
+ const [monthForm, setMonthForm] = useState({ show: false, val: "" });
+ 
+ useEffect(() => {
+ if (view) setData(loadData());
+ }, [view]);
+ 
+ const persist = useCallback((next) => {
+ setData(next);
+ saveData(next);
+ }, []);
+ 
+ function logout() { setView(null); setData(null); }
+ 
+ if (!view) return React.createElement(PinScreen, { onLogin: setView });
+ if (!data) return React.createElement("div", { style: { padding: "3rem", textAlign: "center", color: "#aaa" } }, "Loading…");
+ 
+ const totalBills = data.bills.reduce((s, b) => s + Number(b.amount), 0);
+ const totalReqs = data.requests.reduce((s, r) => s + Number(r.amount), 0);
+ const totalOwed = totalBills + totalReqs;
+ const sentAmt = [
+ ...data.bills.filter(b => b.status === "sent" || b.status === "confirmed"),
+ ...data.requests.filter(r => r.status === "sent" || r.status === "done"),
+ ].reduce((s, x) => s + Number(x.amount), 0);
+ const stillOwed = Math.max(0, totalOwed - sentAmt);
+ 
+ function updBills(fn) { persist({ ...data, bills: data.bills.map(fn) }); }
+ function updReqs(fn) { persist({ ...data, requests: data.requests.map(fn) }); }
+ 
+ function addBill() {
+ if (!billForm.name || !billForm.amount) return;
+ persist({ ...data, bills: [...data.bills, { id: genId(), name: billForm.name, amount: Number(billForm.amount), due: billForm.due, status: "unpaid" }] });
+ setBillForm({ show: false, name: "", amount: "", due: "" });
+ }
+ function addReq() {
+ if (!reqForm.desc || !reqForm.amount) return;
+ persist({ ...data, requests: [...data.requests, { id: genId(), desc: reqForm.desc, amount: Number(reqForm.amount), status: "pending", createdAt: Date.now() }] });
+ setReqForm({ show: false, desc: "", amount: "" });
+ }
+ function newMonth() {
+ persist({ ...data, month: monthForm.val || data.month, bills: data.bills.map(b => ({ ...b, status: "unpaid" })), requests: [] });
+ setMonthForm({ show: false, val: "" });
+ }
+ 
+ const isMine = view === "mine";
+ const e = React.createElement;
+ 
+ return e("div", { className: "app" },
+ 
+ e("div", { className: "header" },
+ e("div", null,
+ e("div", { className: "header-title" }, "Family Budget"),
+ e("div", { className: "header-sub" }, data.month)
+ ),
+ e("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 } },
+ e("div", { className: "toggle" },
+ e("button", { className: isMine ? "active" : "", onClick: () => { setView("mine"); setData(loadData()); } }, "My side"),
+ e("button", { className: !isMine ? "active" : "", onClick: () => { setView("mom"); setData(loadData()); } }, "Mom's side")
+ ),
+ e("button", { className: "text-btn", onClick: logout }, "🔒 Lock")
+ )
+ ),
+ 
+ e("div", { className: "sync-bar" },
+ "💡 Both of you need to use the same device or browser for live sync. Changes save instantly on this device."
+ ),
+ 
+ e("div", { className: "summary-grid" },
+ e("div", { className: "summary-card" },
+ e("div", { className: "summary-label" }, "Total this month"),
+ e("div", { className: "summary-value" }, fmt(totalOwed))
+ ),
+ e("div", { className: "summary-card" },
+ e("div", { className: "summary-label" }, "Sent so far"),
+ e("div", { className: "summary-value", style: { color: "#1a7a4a" } }, fmt(sentAmt))
+ ),
+ e("div", { className: "summary-card" },
+ e("div", { className: "summary-label" }, "Still owed"),
+ e("div", { className: "summary-value", style: { color: stillOwed > 0 ? "#c27c0e" : "#1a7a4a" } }, fmt(stillOwed))
+ )
+ ),
+ 
+ e("div", { className: "section-gap" },
+ e("div", { className: "section-header" },
+ e("div", { className: "section-title" }, "Monthly bills"),
+ !isMine && e("button", { onClick: () => setBillForm(f => ({ ...f, show: !f.show })) }, "+ Add bill")
+ ),
+ !isMine && billForm.show && e("div", { className: "form-row" },
+ e("input", { type: "text", placeholder: "Bill name", value: billForm.name, onChange: ev => setBillForm(f => ({ ...f, name: ev.target.value })), style: { flex: "1 1 130px" } }),
+ e("input", { type: "number", placeholder: "Amount", value: billForm.amount, onChange: ev => setBillForm(f => ({ ...f, amount: ev.target.value })), style: { width: 90 } }),
+ e("input", { type: "text", placeholder: "Due (e.g. 25th)", value: billForm.due, onChange: ev => setBillForm(f => ({ ...f, due: ev.target.value })), style: { width: 115 } }),
+ e("button", { onClick: addBill }, "Add")
+ ),
+ data.bills.length === 0 && e("p", { className: "empty" }, "No bills yet."),
+ data.bills.map(bill =>
+ e("div", { key: bill.id, className: "row" },
+ e("div", { className: "row-info" },
+ e("div", { className: "row-name" }, bill.name),
+ bill.due && e("div", { className: "row-sub" }, "Due " + bill.due)
+ ),
+ e("div", { className: "row-amount" }, fmt(bill.amount)),
+ e("div", { className: "row-actions" },
+ e(Badge, { status: bill.status }),
+ isMine && bill.status === "unpaid" && e("button", { onClick: () => updBills(b => b.id === bill.id ? { ...b, status: "sent" } : b) }, "Mark sent"),
+ !isMine && bill.status === "sent" && e("button", { onClick: () => updBills(b => b.id === bill.id ? { ...b, status: "confirmed" } : b) }, "Confirm ✓"),
+ !isMine && e("button", { className: "danger", onClick: () => persist({ ...data, bills: data.bills.filter(b => b.id !== bill.id) }) }, "🗑")
+ )
+ )
+ )
+ ),
+ 
+ e("div", { className: "section-gap" },
+ e("div", { className: "section-header" },
+ e("div", { className: "section-title" }, "Mom's requests"),
+ !isMine && e("button", { onClick: () => setReqForm(f => ({ ...f, show: !f.show })) }, "+ Request money")
+ ),
+ !isMine && reqForm.show && e("div", { className: "form-row" },
+ e("input", { type: "text", placeholder: "What for? (e.g. groceries)", value: reqForm.desc, onChange: ev => setReqForm(f => ({ ...f, desc: ev.target.value })), style: { flex: "1 1 180px" } }),
+ e("input", { type: "number", placeholder: "Amount", value: reqForm.amount, onChange: ev => setReqForm(f => ({ ...f, amount: ev.target.value })), style: { width: 90 } }),
+ e("button", { onClick: addReq }, "Request")
+ ),
+ data.requests.length === 0 && e("p", { className: "empty" }, isMine ? "No requests from mom yet." : "Tap 'Request money' to ask for extra funds."),
+ data.requests.map(req =>
+ e("div", { key: req.id, className: "row" },
+ e("div", { className: "row-info" },
+ e("div", { className: "row-name" }, req.desc),
+ e("div", { className: "row-sub" }, new Date(req.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }))
+ ),
+ e("div", { className: "row-amount" }, fmt(req.amount)),
+ e("div", { className: "row-actions" },
+ e(Badge, { status: req.status }),
+ isMine && req.status === "pending" && e("button", { onClick: () => updReqs(r => r.id === req.id ? { ...r, status: "sent" } : r) }, "Mark sent"),
+ !isMine && req.status === "sent" && e("button", { onClick: () => updReqs(r => r.id === req.id ? { ...r, status: "done" } : r) }, "Got it ✓"),
+ !isMine && e("button", { className: "danger", onClick: () => persist({ ...data, requests: data.requests.filter(r => r.id !== req.id) }) }, "🗑")
+ )
+ )
+ )
+ ),
+ 
+ !isMine && e("div", null,
+ e("hr", { className: "divider" }),
+ !monthForm.show
+ ? e("button", { onClick: () => setMonthForm({ show: true, val: "" }) }, "📅 Start new month")
+ : e("div", { className: "form-row" },
+ e("span", { style: { fontSize: 13, color: "#888", alignSelf: "center" } }, "Month name:"),
+ e("input", { type: "text", placeholder: "e.g. July 2026", value: monthForm.val, onChange: ev => setMonthForm(f => ({ ...f, val: ev.target.value })), style: { width: 140 } }),
+ e("button", { onClick: newMonth }, "Reset & start"),
+ e("button", { onClick: () => setMonthForm({ show: false, val: "" }) }, "Cancel")
+ )
+ )
+ );
+}
+ 
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
