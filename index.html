@@ -1,0 +1,51 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const DATA_FILE = path.join(__dirname, 'data.json');
+
+const defaultData = {
+bills: [
+{ id: 'b1', name: 'Electric bill', amount: 120, due: '25th', status: 'unpaid' },
+{ id: 'b2', name: 'Internet', amount: 65, due: '20th', status: 'unpaid' },
+{ id: 'b3', name: 'Phone bill', amount: 45, due: '15th', status: 'unpaid' },
+],
+requests: [],
+month: 'June 2026',
+};
+
+function readData() {
+try {
+return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+} catch {
+return defaultData;
+}
+}
+
+function writeData(data) {
+fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Get budget data
+app.get('/api/data', (req, res) => {
+res.json(readData());
+});
+
+// Save budget data
+app.post('/api/data', (req, res) => {
+try {
+writeData(req.body);
+res.json({ ok: true });
+} catch (err) {
+res.status(500).json({ error: 'Failed to save data' });
+}
+});
+
+app.listen(PORT, () => {
+console.log(`Family Budget app running on port ${PORT}`);
+});
